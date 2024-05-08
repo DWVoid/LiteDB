@@ -1,9 +1,8 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.IO;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
-
 using static LiteDB.Constants;
 
 namespace LiteDB.Engine
@@ -19,12 +18,9 @@ namespace LiteDB.Engine
 
         // async thread controls
         private Task _task;
-        private bool _shouldClose = false;
 
-        private readonly ConcurrentQueue<PageBuffer> _queue = new ConcurrentQueue<PageBuffer>();
-        private readonly object _queueSync = new object();
-        private readonly AsyncManualResetEvent _queueHasItems = new AsyncManualResetEvent();
-        private readonly ManualResetEventSlim _queueIsEmpty = new ManualResetEventSlim(true);
+        private readonly Channel<PageBuffer> _channel = Channel.CreateUnbounded<PageBuffer>();
+        private readonly ManualResetEventSlim _queueIsEmpty = new(true);
 
         private Exception _exception = null; // store last exception in async running task
 
@@ -32,12 +28,13 @@ namespace LiteDB.Engine
         {
             _stream = stream;
             _state = state;
+            _task = Task.Factory.StartNew(ExecuteQueue, TaskCreationOptions.LongRunning);
         }
 
         /// <summary>
         /// Get how many pages are waiting for store
         /// </summary>
-        public int Length => _queue.Count;
+        public int Length => _channel.Reader.Count;
 
         /// <summary>
         /// Add page into writer queue and will be saved in disk by another thread. If page.Position = MaxValue, store at end of file (will get final Position)
@@ -50,16 +47,10 @@ namespace LiteDB.Engine
             // throw last exception that stop running queue
             if (_exception != null) throw _exception;
 
-            lock (_queueSync)
+            lock (_channel)
             {
                 _queueIsEmpty.Reset();
-                _queue.Enqueue(page);
-                _queueHasItems.Set();
-
-                if (_task == null)
-                {
-                    _task = Task.Factory.StartNew(ExecuteQueue, TaskCreationOptions.LongRunning);
-                }
+                ENSURE(_channel.Writer.TryWrite(page), "enqueue failure on unbounded queue");
             }
         }
 
@@ -70,7 +61,7 @@ namespace LiteDB.Engine
         {
             _queueIsEmpty.Wait();
 
-            ENSURE(_queue.Count == 0, "queue should be empty after wait() call");
+            ENSURE(_channel.Reader.Count == 0, "queue should be empty after wait() call");
         }
 
         /// <summary>
@@ -80,28 +71,16 @@ namespace LiteDB.Engine
         {
             try
             {
-                while (true)
+                while (await _channel.Reader.WaitToReadAsync())
                 {
-                    if (_queue.TryDequeue(out var page))
+                    while (_channel.Reader.TryRead(out var page)) WritePageToStream(page);
+                    lock (_channel)
                     {
-                        WritePageToStream(page);
+                        if (_channel.Reader.Count > 0) continue;
+                        _queueIsEmpty.Set();
                     }
-                    else
-                    {
-                        lock (_queueSync)
-                        {
-                            if (_queue.Count > 0) continue;
 
-                            _queueIsEmpty.Set();
-                            _queueHasItems.Reset();
-
-                            if (_shouldClose) return;
-                        }
-
-                        _stream.FlushToDisk();
-
-                        await _queueHasItems.WaitAsync();
-                    }
+                    _stream.FlushToDisk();
                 }
             }
             catch (Exception ex)
@@ -132,10 +111,9 @@ namespace LiteDB.Engine
 
         public void Dispose()
         {
-            LOG($"disposing disk writer queue (with {_queue.Count} pages in queue)", "DISK");
+            LOG($"disposing disk writer queue (with {_channel.Reader.Count} pages in queue)", "DISK");
 
-            _shouldClose = true;
-            _queueHasItems.Set(); // unblock the running loop in case there are no items
+            _channel.Writer.Complete(); // unblock the running loop in case there are no items
 
             _task?.Wait();
             _task = null;

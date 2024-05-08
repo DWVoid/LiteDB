@@ -21,7 +21,7 @@ namespace LiteDB.Stress
 
             e.Execute();
 
-            Console.ReadKey();
+            //Console.ReadKey();
         }
     }
 }

@@ -131,6 +131,7 @@ namespace LiteDB
         /// Ensure condition is true, otherwise throw exception (check contract)
         /// </summary>
         [DebuggerHidden]
+        // TODO: refactor this to avoid running message formatting when conditional is false, same for all follows
         public static void ENSURE(bool conditional, string message = null)
         {
             if (conditional == false)
