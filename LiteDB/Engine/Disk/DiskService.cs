@@ -1,10 +1,7 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using static LiteDB.Constants;
 
 namespace LiteDB.Engine
@@ -19,10 +16,10 @@ namespace LiteDB.Engine
         private readonly Lazy<DiskWriterQueue> _queue;
         private readonly EngineState _state;
 
-        private IStreamFactory _dataFactory;
+        private readonly IStreamFactory _dataFactory;
         private readonly IStreamFactory _logFactory;
 
-        private StreamPool _dataPool;
+        private readonly StreamPool _dataPool;
         private readonly StreamPool _logPool;
 
         private long _dataLength;
@@ -85,16 +82,13 @@ namespace LiteDB.Engine
         /// <summary>
         /// Get memory cache instance
         /// </summary>
+        // TODO: mark: cleanup - used WAL and system collection for stat reporting
         public MemoryCache Cache => _cache;
-
-        /// <summary>
-        /// Get Stream pool used inside disk service
-        /// </summary>
-        public StreamPool GetPool(FileOrigin origin) => origin == FileOrigin.Data ? _dataPool : _logPool;
 
         /// <summary>
         /// Create a new empty database (use synced mode)
         /// </summary>
+        // TODO: mark: cleanup - ctor helper
         private void Initialize(Stream stream, Collation collation, long initialSize)
         {
             var buffer = new PageBuffer(new byte[PAGE_SIZE], 0, 0);
@@ -121,6 +115,7 @@ namespace LiteDB.Engine
         /// <summary>
         /// Get a new instance for read data/log pages. This instance are not thread-safe - must request 1 per thread (used in Transaction)
         /// </summary>
+        // TODO: mark: cleanup - used in transaction only, consider migration to WAL
         public DiskReader GetReader()
         {
             return new DiskReader(_state, _cache, _dataPool, _logPool);
@@ -136,6 +131,7 @@ namespace LiteDB.Engine
         /// <summary>
         /// When a page are requested as Writable but not saved in disk, must be discard before release
         /// </summary>
+        // TODO: mark: cleanup - used in transaction only, consider migration to WAL
         public void DiscardDirtyPages(IEnumerable<PageBuffer> pages)
         {
             // only for ROLLBACK action
@@ -149,6 +145,7 @@ namespace LiteDB.Engine
         /// <summary>
         /// Discard pages that contains valid data and was not modified
         /// </summary>
+        // TODO: mark: cleanup - used in transaction only, consider migration to WAL
         public void DiscardCleanPages(IEnumerable<PageBuffer> pages)
         {
             foreach (var page in pages)
@@ -165,6 +162,7 @@ namespace LiteDB.Engine
         /// <summary>
         /// Request for a empty, writable non-linked page.
         /// </summary>
+        // TODO: mark: cleanup - used in transaction only, consider migration to WAL
         public PageBuffer NewPage()
         {
             return _cache.NewPage();
@@ -173,6 +171,7 @@ namespace LiteDB.Engine
         /// <summary>
         /// Write pages inside file origin using async queue - WORKS ONLY FOR LOG FILE - returns how many pages are inside "pages"
         /// </summary>
+        // TODO: mark: cleanup - used in transaction only, consider migration to WAL
         public int WriteAsync(IEnumerable<PageBuffer> pages)
         {
             var count = 0;
@@ -219,6 +218,7 @@ namespace LiteDB.Engine
         /// <summary>
         /// Mark a file with a single signal to next open do auto-rebuild. Used only when closing database (after close files)
         /// </summary>
+        // TODO: mark: cleanup - used in engine cleanup only, possible bad encapsulation
         internal void MarkAsInvalidState()
         {
             FileHelper.TryExec(60, () =>
@@ -239,6 +239,7 @@ namespace LiteDB.Engine
         /// <summary>
         /// Read all database pages inside file with no cache using. PageBuffers dont need to be Released
         /// </summary>
+        // TODO: mark: cleanup - used in WAL and init only, need cleanup init misuse
         public IEnumerable<PageBuffer> ReadFull(FileOrigin origin)
         {
             // do not use MemoryCache factory - reuse same buffer array (one page per time)
@@ -280,6 +281,7 @@ namespace LiteDB.Engine
         /// <summary>
         /// Write pages DIRECT in disk with NO queue. This pages are not cached and are not shared - WORKS FOR DATA FILE ONLY
         /// </summary>
+        // TODO: mark: cleanup - used in WAL only
         public void Write(IEnumerable<PageBuffer> pages, FileOrigin origin)
         {
             ENSURE(origin == FileOrigin.Data);
@@ -303,6 +305,7 @@ namespace LiteDB.Engine
         /// <summary>
         /// Set new length for file in sync mode. Queue must be empty before set length
         /// </summary>
+        // TODO: mark: cleanup - used in WAL only
         public void SetLength(long length, FileOrigin origin)
         {
             var stream = origin == FileOrigin.Log ? _logPool.Writer : _dataPool.Writer;
@@ -324,6 +327,7 @@ namespace LiteDB.Engine
         /// <summary>
         /// Get file name (or Stream name)
         /// </summary>
+        //  TODO: yes but why?
         public string GetName(FileOrigin origin)
         {
             return origin == FileOrigin.Data ? _dataFactory.Name : _logFactory.Name;

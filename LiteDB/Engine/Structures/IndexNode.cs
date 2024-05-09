@@ -164,15 +164,15 @@ namespace LiteDB.Engine
         public IndexNode(BsonDocument doc)
         {
             _page = null;
-            _segment = new BufferSlice(new byte[0], 0, 0);
+            _segment = new BufferSlice([], 0, 0);
 
             this.Position = new PageAddress(0, 0);
             this.Slot = 0;
             this.Levels = 0;
             this.DataBlock = PageAddress.Empty;
             this.NextNode = PageAddress.Empty;
-            this.Next = new PageAddress[0];
-            this.Prev = new PageAddress[0];
+            this.Next = [];
+            this.Prev = [];
 
             // index node key IS document
             this.Key = doc;
