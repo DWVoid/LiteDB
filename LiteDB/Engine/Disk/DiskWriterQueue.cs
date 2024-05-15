@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using Microsoft.Win32.SafeHandles;
 using static LiteDB.Constants;
 
 namespace LiteDB.Engine;
@@ -13,7 +14,7 @@ namespace LiteDB.Engine;
 /// </summary>
 internal class DiskWriterQueue : IDisposable
 {
-    private readonly Stream _stream;
+    private readonly SafeFileHandle _file;
     private readonly EngineState _state;
 
     // async thread controls
@@ -24,9 +25,9 @@ internal class DiskWriterQueue : IDisposable
 
     private Exception _exception = null; // store last exception in async running task
 
-    public DiskWriterQueue(Stream stream, EngineState state)
+    public DiskWriterQueue(SafeFileHandle file, EngineState state)
     {
-        _stream = stream;
+        _file = file;
         _state = state;
         _task = Task.Run(ExecuteQueue);
     }
@@ -79,7 +80,7 @@ internal class DiskWriterQueue : IDisposable
                     _queueIsEmpty.Set();
                 }
 
-                _stream.FlushToDisk();
+                RandomAccess.FlushToDisk(_file);
             }
         }
         catch (Exception ex)
@@ -92,18 +93,11 @@ internal class DiskWriterQueue : IDisposable
     private void WritePageToStream(PageBuffer page)
     {
         if (page == null) return;
-
         ENSURE(page.ShareCounter > 0, "page must be shared at least 1");
-
-        // set stream position according to page
-        _stream.Position = page.Position;
-
 #if DEBUG
         _state.SimulateDiskWriteFail?.Invoke(page);
 #endif
-
-        _stream.Write(page.Array, page.Offset, PAGE_SIZE);
-
+        RandomAccess.Write(_file, page.Array.AsSpan().Slice(page.Offset, PAGE_SIZE), page.Position);
         // release page here (no page use after this)
         page.Release();
     }
