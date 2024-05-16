@@ -7,6 +7,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using LiteDB.Storage;
 using static LiteDB.Constants;
 
 namespace LiteDB.Engine
@@ -16,16 +17,6 @@ namespace LiteDB.Engine
     /// </summary>
     public class EngineSettings
     {
-        /// <summary>
-        /// Get/Set custom stream to be used as datafile (can be MemoryStream or TempStream). Do not use FileStream - to use physical file, use "filename" attribute (and keep DataStream/WalStream null)
-        /// </summary>
-        public Stream DataStream { get; set; } = null;
-
-        /// <summary>
-        /// Get/Set custom stream to be used as log file. If is null, use a new TempStream (for TempStream datafile) or MemoryStream (for MemoryStream datafile)
-        /// </summary>
-        public Stream LogStream { get; set; } = null;
-
         /// <summary>
         /// Get/Set custom stream to be used as temp file. If is null, will create new FileStreamFactory with "-tmp" on name
         /// </summary>
@@ -40,11 +31,6 @@ namespace LiteDB.Engine
         /// Get database password to decrypt pages
         /// </summary>
         public string Password { get; set; }
-
-        /// <summary>
-        /// If database is new, initialize with allocated space (in bytes) (default: 0)
-        /// </summary>
-        public long InitialSize { get; set; } = 0;
 
         /// <summary>
         /// Create database with custom string collection (used only to create database) (default: Collation.Default)
@@ -67,55 +53,51 @@ namespace LiteDB.Engine
         public bool Upgrade { get; set; } = false;
 
         /// <summary>
-        /// Create new IStreamFactory for datafile
+        /// Create new IRandomAccessFactory for datafile
         /// </summary>
-        internal IStreamFactory CreateDataFactory()
+        internal IRandomAccessFactory CreateDataFileFactory()
         {
-            if (this.DataStream != null)
+            if (this.Filename == ":memory:")
             {
-                return new StreamFactory(this.DataStream, this.Password);
+                throw new NotImplementedException();
             }
-            else if (this.Filename == ":memory:")
+
+            if (this.Filename == ":temp:")
             {
-                return new StreamFactory(new MemoryStream(), this.Password);
+                throw new NotImplementedException();
             }
-            else if (this.Filename == ":temp:")
+
+            if (!string.IsNullOrEmpty(this.Filename))
             {
-                return new StreamFactory(new TempStream(), this.Password);
-            }
-            else if (!string.IsNullOrEmpty(this.Filename))
-            {
-                return new FileStreamFactory(this.Filename, this.Password, this.ReadOnly, false);
+                return new RandomAccessFileFactory(this.Filename, this.ReadOnly);
             }
 
             throw new ArgumentException("EngineSettings must have Filename or DataStream as data source");
         }
 
         /// <summary>
-        /// Create new IStreamFactory for logfile
+        /// Create new IRandomAccessFactory for logfile
         /// </summary>
-        internal IStreamFactory CreateLogFactory()
+        internal IRandomAccessFactory CreateLogFileFactory()
         {
-            if (this.LogStream != null)
+            if (this.Filename == ":memory:")
             {
-                return new StreamFactory(this.LogStream, this.Password);
+                throw new NotImplementedException();
             }
-            else if (this.Filename == ":memory:")
+
+            if (this.Filename == ":temp:")
             {
-                return new StreamFactory(new MemoryStream(), this.Password);
+                throw new NotImplementedException();
             }
-            else if (this.Filename == ":temp:")
-            {
-                return new StreamFactory(new TempStream(), this.Password);
-            }
-            else if (!string.IsNullOrEmpty(this.Filename))
+
+            if (!string.IsNullOrEmpty(this.Filename))
             {
                 var logName = FileHelper.GetLogFile(this.Filename);
-
-                return new FileStreamFactory(logName, this.Password, this.ReadOnly, false);
+                return new RandomAccessFileFactory(logName, this.ReadOnly);
             }
 
-            return new StreamFactory(new MemoryStream(), this.Password);
+            throw new ArgumentException("EngineSettings must have Filename or DataStream as data source");
+            //return new StreamFactory(new MemoryStream(), this.Password);
         }
 
         /// <summary>
@@ -144,5 +126,58 @@ namespace LiteDB.Engine
 
             return new StreamFactory(new TempStream(), this.Password);
         }
+
+        #region compatibility
+        // TODO: kept for compatibility reasons during migration
+
+        /// <summary>
+        /// Create new IStreamFactory for datafile
+        /// </summary>
+        internal IStreamFactory CreateDataFactory()
+        {
+            if (this.Filename == ":memory:")
+            {
+                return new StreamFactory(new MemoryStream(), this.Password);
+            }
+
+            if (this.Filename == ":temp:")
+            {
+                return new StreamFactory(new TempStream(), this.Password);
+            }
+
+            if (!string.IsNullOrEmpty(this.Filename))
+            {
+                return new FileStreamFactory(this.Filename, this.Password, this.ReadOnly, false);
+            }
+
+            throw new ArgumentException("EngineSettings must have Filename or DataStream as data source");
+        }
+
+        /// <summary>
+        /// Create new IStreamFactory for logfile
+        /// </summary>
+        internal IStreamFactory CreateLogFactory()
+        {
+            if (this.Filename == ":memory:")
+            {
+                return new StreamFactory(new MemoryStream(), this.Password);
+            }
+
+            if (this.Filename == ":temp:")
+            {
+                return new StreamFactory(new TempStream(), this.Password);
+            }
+
+            if (!string.IsNullOrEmpty(this.Filename))
+            {
+                var logName = FileHelper.GetLogFile(this.Filename);
+
+                return new FileStreamFactory(logName, this.Password, this.ReadOnly, false);
+            }
+
+            return new StreamFactory(new MemoryStream(), this.Password);
+        }
+
+        #endregion
     }
 }

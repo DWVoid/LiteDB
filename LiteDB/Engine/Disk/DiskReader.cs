@@ -1,6 +1,5 @@
 ﻿using System;
-using System.IO;
-using Microsoft.Win32.SafeHandles;
+using LiteDB.Storage;
 using static LiteDB.Constants;
 
 namespace LiteDB.Engine;
@@ -9,7 +8,7 @@ namespace LiteDB.Engine;
 /// Memory file reader - must call Dipose after use to return reader into pool
 /// This class is not ThreadSafe - must have 1 instance per thread (get instance from DiskService)
 /// </summary>
-internal class DiskReader(MemoryCache cache, SafeFileHandle dataFile, SafeFileHandle logFile) : IDisposable
+internal class DiskReader(MemoryCache cache, IRandomAccess dataFile, IRandomAccess logFile) : IDisposable
 {
     public PageBuffer ReadPage(long position, bool writable, FileOrigin origin)
     {
@@ -27,11 +26,11 @@ internal class DiskReader(MemoryCache cache, SafeFileHandle dataFile, SafeFileHa
     /// <summary>
     /// Read bytes from stream into buffer slice
     /// </summary>
-    private void ReadFile(SafeFileHandle origin, long position, BufferSlice buffer)
+    private void ReadFile(IRandomAccess origin, long position, BufferSlice buffer)
     {
         // can't test "Length" from out-to-date stream
         // ENSURE(stream.Length <= position - PAGE_SIZE, "can't be read from beyond file length");
-        var read = RandomAccess.Read(origin, buffer.Array.AsSpan().Slice(buffer.Offset, buffer.Count), position);
+        var read = origin.Read(buffer.Array.AsSpan().Slice(buffer.Offset, buffer.Count), position);
         ENSURE(read == buffer.Count);
         DEBUG(buffer.All(0) == false, "check if are not reading out of file length");
     }

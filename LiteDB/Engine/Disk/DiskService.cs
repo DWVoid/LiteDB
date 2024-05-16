@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
-using Microsoft.Win32.SafeHandles;
+using LiteDB.Storage;
 using static LiteDB.Constants;
 
 namespace LiteDB.Engine;
@@ -13,16 +13,14 @@ namespace LiteDB.Engine;
 /// </summary>
 internal class DiskService : IDisposable
 {
-    private readonly SafeFileHandle _dataFile;
-    private readonly SafeFileHandle _logFile;
+    private readonly IRandomAccess _dataFile;
+    private readonly IRandomAccess _logFile;
 
     private readonly MemoryCache _cache;
     private readonly Lazy<DiskWriterQueue> _queue;
 
-    private readonly IStreamFactory _dataFactory;
-    private readonly IStreamFactory _logFactory;
-
-    private readonly StreamPool _dataPool;
+    private readonly IRandomAccessFactory _dataFactory;
+    private readonly IRandomAccessFactory _logFactory;
 
     private long _dataLength;
     private long _logLength;
@@ -35,14 +33,11 @@ internal class DiskService : IDisposable
         _cache = new MemoryCache(memorySegmentSizes);
 
         // get new stream factory based on settings
-        _dataFactory = settings.CreateDataFactory();
-        _logFactory = settings.CreateLogFactory();
-
-        // TODO: Create LogFile and DataFile
-
-        // create stream pool
-        _dataPool = new StreamPool(_dataFactory, false);
-        _logPool = new StreamPool(_logFactory, true);
+        _dataFactory = settings.CreateDataFileFactory();
+        _logFactory = settings.CreateLogFileFactory();
+        // TODO: this will actively open the datafile. refactor
+        _dataFile = _dataFactory.Access;
+        _logFile = _logFactory.Access;
 
         var isNew = _dataFactory.GetLength() == 0L;
 
@@ -53,20 +48,14 @@ internal class DiskService : IDisposable
         if (isNew)
         {
             LOG($"creating new database: '{Path.GetFileName(_dataFactory.Name)}'", "DISK");
-            this.Initialize(_dataPool.Writer, settings.Collation, settings.InitialSize);
-        }
-
-        // if not readonly, force open writable datafile
-        if (settings.ReadOnly == false)
-        {
-            _ = _dataPool.Writer.CanRead;
+            this.Initialize(_dataFile, settings.Collation);
         }
 
         // get initial data file length
         _dataLength = _dataFactory.GetLength() - PAGE_SIZE;
 
         // get initial log file length (should be 1 page before)
-        if (_logFactory.Exists())
+        if (_logFactory.Exists)
         {
             _logLength = _logFactory.GetLength() - PAGE_SIZE;
         }
@@ -91,7 +80,7 @@ internal class DiskService : IDisposable
     /// Create a new empty database (use synced mode)
     /// </summary>
     // TODO: mark: cleanup - ctor helper
-    private void Initialize(Stream stream, Collation collation, long initialSize)
+    private void Initialize(IRandomAccess stream, Collation collation)
     {
         var buffer = new PageBuffer(new byte[PAGE_SIZE], 0, 0);
         var header = new HeaderPage(buffer, 0);
@@ -101,17 +90,8 @@ internal class DiskService : IDisposable
 
         // update buffer
         header.UpdateBuffer();
-
-        stream.Write(buffer.Array, buffer.Offset, PAGE_SIZE);
-
-        if (initialSize > 0)
-        {
-            if (stream is AesStream) throw LiteException.InitialSizeCryptoNotSupported();
-            if (initialSize % PAGE_SIZE != 0) throw LiteException.InvalidInitialSize();
-            stream.SetLength(initialSize);
-        }
-
-        stream.FlushToDisk();
+        stream.Write(buffer.Array.AsSpan().Slice(buffer.Offset, PAGE_SIZE), 0);
+        stream.Flush();
     }
 
     /// <summary>
@@ -216,13 +196,17 @@ internal class DiskService : IDisposable
     {
         FileHelper.TryExec(60, () =>
         {
-            using (var stream = _dataFactory.GetStream(true, true))
+            try
             {
+                var access = _dataFactory.Access;
                 var buffer = new byte[PAGE_SIZE];
-                stream.Read(buffer, 0, PAGE_SIZE);
+                access.Read(buffer, 0);
                 buffer[HeaderPage.P_INVALID_DATAFILE_STATE] = 1;
-                stream.Position = 0;
-                stream.Write(buffer, 0, PAGE_SIZE);
+                access.Write(buffer, 0);
+            }
+            catch
+            {
+                _dataFactory.Close();
             }
         });
     }
@@ -235,17 +219,14 @@ internal class DiskService : IDisposable
     // TODO: mark: cleanup - used in WAL and init only, need cleanup init misuse
     public IEnumerable<PageBuffer> ReadFull(FileOrigin origin)
     {
-        // do not use MemoryCache factory - reuse same buffer array (one page per time)
-        // do not use BufferPool because header page can't be shared (byte[] is used inside page return)
-        var buffer = new byte[PAGE_SIZE];
-
         var file = origin == FileOrigin.Log ? _logFile : _dataFile;
         // get length before starts (avoid grow during loop)
         var length = this.GetVirtualLength(origin);
-        var fPosition = 0;
+        var fPosition = 0L;
         while (fPosition < length)
         {
-            var read = RandomAccess.Read(file, buffer.AsSpan().Slice(0, PAGE_SIZE), fPosition);
+            var buffer = new byte[PAGE_SIZE];
+            var read = file.Read(buffer.AsSpan(), fPosition);
             ENSURE(read == PAGE_SIZE, $"ReadFull must read PAGE_SIZE bytes [{read}]");
             yield return new PageBuffer(buffer, 0, 0)
             {
@@ -270,10 +251,10 @@ internal class DiskService : IDisposable
         {
             ENSURE(page.ShareCounter == 0, "this page can't be shared to use sync operation - do not use cached pages");
             _dataLength = Math.Max(_dataLength, page.Position);
-            RandomAccess.Write(file, page.Array.AsSpan().Slice(page.Offset, PAGE_SIZE), page.Position);
+            file.Write(page.Array.AsSpan().Slice(page.Offset, PAGE_SIZE), page.Position);
         }
 
-        RandomAccess.FlushToDisk(file);
+        file.Flush();
     }
 
     /// <summary>
@@ -294,7 +275,7 @@ internal class DiskService : IDisposable
             Interlocked.Exchange(ref _dataLength, length - PAGE_SIZE);
         }
 
-        RandomAccess.SetLength(file, length);
+        file.Length = length;
     }
 
     /// <summary>
@@ -315,11 +296,11 @@ internal class DiskService : IDisposable
 
         // get stream length from writer - is safe because only this instance
         // can change file size
-        var delete = _logFactory.Exists() && _logPool.Writer.Length == 0;
+        var delete = _logFactory.Exists && _logFile.Length == 0;
 
-        // dispose Stream pools
-        _dataPool.Dispose();
-        _logPool.Dispose();
+        // dispose file resources
+        _dataFactory.Close();
+        _logFactory.Close();
 
         if (delete) _logFactory.Delete();
 

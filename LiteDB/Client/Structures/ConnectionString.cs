@@ -29,11 +29,6 @@ namespace LiteDB
         public string Password { get; set; } = null;
 
         /// <summary>
-        /// "initial size": If database is new, initialize with allocated space - support KB, MB, GB (default: 0)
-        /// </summary>
-        public long InitialSize { get; set; } = 0;
-
-        /// <summary>
         /// "readonly": Open datafile in readonly mode (default: false)
         /// </summary>
         public bool ReadOnly { get; set; } = false;
@@ -90,7 +85,6 @@ namespace LiteDB
                 this.Password = null;
             }
 
-            this.InitialSize = _values.GetFileSize(@"initial size", this.InitialSize);
             this.ReadOnly = _values.GetValue("readonly", this.ReadOnly);
 
             this.Collation = _values.ContainsKey("collation") ? new Collation(_values.GetValue<string>("collation")) : this.Collation;
@@ -113,7 +107,6 @@ namespace LiteDB
             {
                 Filename = this.Filename,
                 Password = this.Password,
-                InitialSize = this.InitialSize,
                 ReadOnly = this.ReadOnly,
                 Collation = this.Collation,
                 Upgrade = this.Upgrade,

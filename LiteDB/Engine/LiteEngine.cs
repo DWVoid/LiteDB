@@ -55,7 +55,7 @@ namespace LiteDB.Engine
         /// Initialize LiteEngine using connection memory database
         /// </summary>
         public LiteEngine()
-            : this(new EngineSettings { DataStream = new MemoryStream() })
+            : this(new EngineSettings { Filename = ":memory:" })
         {
         }
 
@@ -242,6 +242,7 @@ namespace LiteDB.Engine
             // close engine lock service
             tc.Catch(() => _locker?.Dispose());
 
+            // TODO: use of disposed resource is anti-pattern, cleanup
             if (tc.InvalidDatafileState)
             {
                 // mark byte = 1 in HeaderPage.P_INVALID_DATAFILE_STATE - will open in auto-rebuild

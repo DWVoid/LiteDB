@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using LiteDB.Storage;
 using Microsoft.Win32.SafeHandles;
 using static LiteDB.Constants;
 
@@ -14,7 +15,7 @@ namespace LiteDB.Engine;
 /// </summary>
 internal class DiskWriterQueue : IDisposable
 {
-    private readonly SafeFileHandle _file;
+    private readonly IRandomAccess _file;
     private readonly EngineState _state;
 
     // async thread controls
@@ -25,7 +26,7 @@ internal class DiskWriterQueue : IDisposable
 
     private Exception _exception = null; // store last exception in async running task
 
-    public DiskWriterQueue(SafeFileHandle file, EngineState state)
+    public DiskWriterQueue(IRandomAccess file, EngineState state)
     {
         _file = file;
         _state = state;
@@ -80,7 +81,7 @@ internal class DiskWriterQueue : IDisposable
                     _queueIsEmpty.Set();
                 }
 
-                RandomAccess.FlushToDisk(_file);
+                _file.Flush();
             }
         }
         catch (Exception ex)
@@ -97,7 +98,7 @@ internal class DiskWriterQueue : IDisposable
 #if DEBUG
         _state.SimulateDiskWriteFail?.Invoke(page);
 #endif
-        RandomAccess.Write(_file, page.Array.AsSpan().Slice(page.Offset, PAGE_SIZE), page.Position);
+        _file.Write(page.Array.AsSpan().Slice(page.Offset, PAGE_SIZE), page.Position);
         // release page here (no page use after this)
         page.Release();
     }

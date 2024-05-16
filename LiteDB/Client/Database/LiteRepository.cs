@@ -48,15 +48,7 @@ namespace LiteDB
         {
             _db = new LiteDatabase(connectionString, mapper);
         }
-
-        /// <summary>
-        /// Starts LiteDB database using a Stream disk
-        /// </summary>
-        public LiteRepository(Stream stream, BsonMapper mapper = null, Stream logStream = null)
-        {
-            _db = new LiteDatabase(stream, mapper, logStream);
-        }
-
+        
         #endregion
 
         #region Insert
