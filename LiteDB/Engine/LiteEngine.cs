@@ -93,9 +93,6 @@ namespace LiteDB.Engine
                 // initialize engine state 
                 _state = new EngineState(this, _settings);
 
-                // before initilize, try if must be upgrade
-                if (_settings.Upgrade) this.TryUpgrade();
-
                 // initialize disk service (will create database if needed)
                 _disk = new DiskService(_settings, _state, MEMORY_SEGMENT_SIZES);
 

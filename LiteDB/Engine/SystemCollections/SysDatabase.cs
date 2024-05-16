@@ -16,7 +16,6 @@ namespace LiteDB.Engine
             yield return new BsonDocument
             {
                 ["name"] = _disk.GetName(FileOrigin.Data),
-                ["encrypted"] = _settings.Password != null,
                 ["readOnly"] = _settings.ReadOnly,
 
                 ["lastPageID"] = (int)_header.LastPageID,

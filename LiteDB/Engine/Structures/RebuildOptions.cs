@@ -17,11 +17,6 @@ namespace LiteDB.Engine
         private string _buildId = Guid.NewGuid().ToString("d").ToLower().Substring(6);
 
         /// <summary>
-        /// Rebuild database with a new password
-        /// </summary>
-        public string Password { get; set; } = null;
-
-        /// <summary>
         /// Define a new collation when rebuild
         /// </summary>
         public Collation Collation { get; set; } = null;

@@ -33,11 +33,6 @@ namespace LiteDB
 
                 if (json.IsDocument == false) throw LiteException.UnexpectedToken(next);
 
-                if (json["password"].IsString)
-                {
-                    options.Password = json["password"];
-                }
-
                 if (json["collation"].IsString)
                 {
                     options.Collation = new Collation(json["collation"].AsString);

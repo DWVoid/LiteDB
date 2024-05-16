@@ -41,9 +41,7 @@ namespace LiteDB.Engine
         public long Rebuild()
         {
             var collation = new Collation(this.Pragma(Pragmas.COLLATION));
-            var password = _settings.Password;
-
-            return this.Rebuild(new RebuildOptions { Password = password, Collation = collation });
+            return this.Rebuild(new RebuildOptions {  Collation = collation });
         }
 
         /// <summary>

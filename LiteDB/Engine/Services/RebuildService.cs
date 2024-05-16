@@ -26,10 +26,7 @@ namespace LiteDB.Engine
             var buffer = this.ReadFirstBytes();
 
             // test for valid reader to use
-            _fileVersion = 
-                FileReaderV7.IsVersion(buffer) ? 7 :
-                FileReaderV8.IsVersion(buffer) ? 8 : throw LiteException.InvalidDatabase();
-
+            _fileVersion = FileReaderV8.IsVersion(buffer) ? 8 : throw LiteException.InvalidDatabase();
         }
 
         public long Rebuild(RebuildOptions options)
@@ -39,9 +36,7 @@ namespace LiteDB.Engine
             var tempFilename = FileHelper.GetSuffixFile(_settings.Filename, "-temp", true);
 
             // open file reader
-            using (var reader = _fileVersion == 7 ?
-                new FileReaderV7(_settings) :
-                (IFileReader)new FileReaderV8(_settings, options.Errors))
+            using (var reader = new FileReaderV8(_settings, options.Errors))
             {
                 // open file reader and ready to import to new temp engine instance
                 reader.Open();
@@ -51,7 +46,6 @@ namespace LiteDB.Engine
                 {
                     Filename = tempFilename,
                     Collation = options.Collation,
-                    Password = options.Password,
                 }))
                 {
                     // copy all database to new Log file with NO checkpoint during all rebuild
