@@ -8,7 +8,7 @@ namespace LiteDB.Engine
     /// <summary>
     /// Represent a index node inside a Index Page
     /// </summary>
-    internal class IndexNode
+    internal sealed class IndexNode
     {
         /// <summary>
         /// Fixed length of IndexNode (12 bytes)
@@ -61,12 +61,14 @@ namespace LiteDB.Engine
         /// <summary>
         /// Link to prev value (used in skip lists - Prev.Length = Next.Length) [5 bytes]
         /// </summary>
-        public PageAddress[] Prev { get; private set; }
+        public PageAddress Prev(int level) => 
+            _segment.ReadPageAddress(P_PREV_NEXT + (level * PageAddress.SIZE * 2));
 
         /// <summary>
         /// Link to next value (used in skip lists - Prev.Length = Next.Length)
         /// </summary>
-        public PageAddress[] Next { get; private set; }
+        public PageAddress Next(int level) => 
+            _segment.ReadPageAddress(P_PREV_NEXT + (level * PageAddress.SIZE * 2) + PageAddress.SIZE);
 
         /// <summary>
         /// Get index page reference
@@ -111,16 +113,6 @@ namespace LiteDB.Engine
             this.Levels = segment.ReadByte(P_LEVELS);
             this.DataBlock = segment.ReadPageAddress(P_DATA_BLOCK);
             this.NextNode = segment.ReadPageAddress(P_NEXT_NODE);
-
-            this.Next = new PageAddress[this.Levels];
-            this.Prev = new PageAddress[this.Levels];
-
-            for (var i = 0; i < this.Levels; i++)
-            {
-                this.Prev[i] = segment.ReadPageAddress(P_PREV_NEXT + (i * PageAddress.SIZE * 2));
-                this.Next[i] = segment.ReadPageAddress(P_PREV_NEXT + (i * PageAddress.SIZE * 2) + PageAddress.SIZE);
-            }
-
             this.Key = segment.ReadIndexKey(P_KEY);
         }
 
@@ -137,8 +129,6 @@ namespace LiteDB.Engine
             this.Levels = levels;
             this.DataBlock = dataBlock;
             this.NextNode = PageAddress.Empty;
-            this.Next = new PageAddress[levels];
-            this.Prev = new PageAddress[levels];
             this.Key = key;
 
             // persist in buffer read only data
@@ -163,6 +153,7 @@ namespace LiteDB.Engine
         /// </summary>
         public IndexNode(BsonDocument doc)
         {
+            // TODO: this might be bad design. setting this will directly raise NPE
             _page = null;
             _segment = new BufferSlice([], 0, 0);
 
@@ -171,9 +162,6 @@ namespace LiteDB.Engine
             this.Levels = 0;
             this.DataBlock = PageAddress.Empty;
             this.NextNode = PageAddress.Empty;
-            this.Next = [];
-            this.Prev = [];
-
             // index node key IS document
             this.Key = doc;
         }
@@ -184,9 +172,7 @@ namespace LiteDB.Engine
         public void SetNextNode(PageAddress value)
         {
             this.NextNode = value;
-
             _segment.Write(value, P_NEXT_NODE);
-
             _page.IsDirty = true;
         }
 
@@ -196,11 +182,7 @@ namespace LiteDB.Engine
         public void SetPrev(byte level, PageAddress value)
         {
             ENSURE(level <= this.Levels, "out of index in level");
-
-            this.Prev[level] = value;
-
             _segment.Write(value, P_PREV_NEXT + (level * PageAddress.SIZE * 2));
-
             _page.IsDirty = true;
         }
 
@@ -210,25 +192,15 @@ namespace LiteDB.Engine
         public void SetNext(byte level, PageAddress value)
         {
             ENSURE(level <= this.Levels, "out of index in level");
-
-            this.Next[level] = value;
-
             _segment.Write(value, P_PREV_NEXT + (level * PageAddress.SIZE * 2) + PageAddress.SIZE);
-
             _page.IsDirty = true;
         }
 
         /// <summary>
         /// Returns Next (order == 1) OR Prev (order == -1)
         /// </summary>
-        public PageAddress GetNextPrev(byte level, int order)
-        {
-            return order == Query.Ascending ? this.Next[level] : this.Prev[level];
-        }
+        public PageAddress GetNextPrev(byte level, int order) => order == Query.Ascending ? Next(level) : Prev(level);
 
-        public override string ToString()
-        {
-            return $"Pos: [{this.Position}] - Key: {this.Key}";
-        }
+        public override string ToString() => $"Pos: [{Position}] - Key: {Key}";
     }
 }

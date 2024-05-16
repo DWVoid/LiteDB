@@ -1,13 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
 using static LiteDB.Constants;
 
 namespace LiteDB
@@ -23,15 +14,15 @@ namespace LiteDB
 
         public BufferSlice(byte[] array, int offset, int count)
         {
-            this.Array = array;
-            this.Offset = offset;
-            this.Count = count;
+            Array = array;
+            Offset = offset;
+            Count = count;
         }
 
         public byte this[int index]
         {
-            get => this.Array[this.Offset + index];
-            set => this.Array[this.Offset + index] = value;
+            get => Array[Offset + index];
+            set => Array[Offset + index] = value;
         }
 
         /// <summary>
@@ -39,7 +30,7 @@ namespace LiteDB
         /// </summary>
         public void Clear()
         {
-            System.Array.Clear(this.Array, this.Offset, this.Count);
+            System.Array.Clear(Array, Offset, Count);
         }
 
         /// <summary>
@@ -47,9 +38,9 @@ namespace LiteDB
         /// </summary>
         public void Clear(int offset, int count)
         {
-            ENSURE(offset + count <= this.Count, "must fit in this page");
+            ENSURE(offset + count <= Count, "must fit in this page");
 
-            System.Array.Clear(this.Array, this.Offset + offset, count);
+            System.Array.Clear(Array, Offset + offset, count);
         }
 
         /// <summary>
@@ -57,9 +48,9 @@ namespace LiteDB
         /// </summary>
         public void Fill(byte value)
         {
-            for (var i = 0; i < this.Count; i++)
+            for (var i = 0; i < Count; i++)
             {
-                this.Array[this.Offset + i] = value;
+                Array[Offset + i] = value;
             }
         }
 
@@ -68,38 +59,12 @@ namespace LiteDB
         /// </summary>
         public bool All(byte value)
         {
-            for (var i = 0; i < this.Count; i++)
+            for (var i = 0; i < Count; i++)
             {
-                if (this.Array[this.Offset + i] != value) return false;
+                if (Array[Offset + i] != value) return false;
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// Return byte[] slice into hex digits
-        /// </summary>
-        public string ToHex()
-        {
-            var output = new StringBuilder();
-            var position = 0L;
-
-            while(position < this.Count)
-            {
-                //output.Append(position.ToString("X3") + "  ");
-
-                for (var i = 0; i < 32 && position < this.Count; i++)
-                {
-                    output.Append(this.Array[this.Offset + position].ToString("X2") + " ");
-
-                    position++;
-                }
-
-                output.AppendLine();
-
-            }
-
-            return output.ToString();
         }
 
         /// <summary>
@@ -107,7 +72,7 @@ namespace LiteDB
         /// </summary>
         public BufferSlice Slice(int offset, int count)
         {
-            return new BufferSlice(this.Array, this.Offset + offset, count);
+            return new BufferSlice(Array, Offset + offset, count);
         }
 
         /// <summary>
@@ -115,16 +80,11 @@ namespace LiteDB
         /// </summary>
         public byte[] ToArray()
         {
-            var buffer = new byte[this.Count];
-
-            Buffer.BlockCopy(this.Array, this.Offset, buffer, 0, this.Count);
-
+            var buffer = new byte[Count];
+            Buffer.BlockCopy(Array, Offset, buffer, 0, Count);
             return buffer;
         }
 
-        public override string ToString()
-        {
-            return $"Offset: {this.Offset} - Count: {this.Count}";
-        }
+        public override string ToString() => $"Offset: {Offset} - Count: {Count}";
     }
 }
