@@ -75,7 +75,7 @@ namespace LiteDB.Tests.Engine
             var data1 = DataGen.Person(1, 100).ToArray();
             var data2 = DataGen.Person(101, 200).ToArray();
 
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var person = db.GetCollection<Person>();
 
@@ -135,7 +135,7 @@ namespace LiteDB.Tests.Engine
             var data1 = DataGen.Person(1, 100).ToArray();
             var data2 = DataGen.Person(101, 200).ToArray();
 
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var person = db.GetCollection<Person>();
 
@@ -192,7 +192,7 @@ namespace LiteDB.Tests.Engine
             var data0 = DataGen.Person(1, 10).ToArray();
             var data1 = DataGen.Person(11, 20).ToArray();
 
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var person = db.GetCollection<Person>();
 
@@ -222,51 +222,6 @@ namespace LiteDB.Tests.Engine
                 person.Insert(data1);
 
                 person.Count().Should().Be(20);
-            }
-        }
-
-        private class BlockingStream : MemoryStream
-        {
-            public readonly AutoResetEvent   Blocked       = new AutoResetEvent(false);
-            public readonly ManualResetEvent ShouldUnblock = new ManualResetEvent(false);
-            public          bool             ShouldBlock;
-
-            public override void Write(byte[] buffer, int offset, int count)
-            {
-                if (this.ShouldBlock)
-                {
-                    this.Blocked.Set();
-                    this.ShouldUnblock.WaitOne();
-                    this.Blocked.Reset();
-                }
-                base.Write(buffer, offset, count);
-            }
-        }
-
-        [Fact]
-        public void Test_Transaction_ReleaseWhenFailToStart()
-        {
-            var    blockingStream             = new BlockingStream();
-            var    db                         = new LiteDatabase(blockingStream) { Timeout = TimeSpan.FromSeconds(1) };
-            Thread lockerThread               = null;
-            try
-            {
-                lockerThread = new Thread(() =>
-                {
-                    db.GetCollection<Person>().Insert(new Person());
-                    blockingStream.ShouldBlock = true;
-                    db.Checkpoint();
-                    db.Dispose();
-                });
-                lockerThread.Start();
-                blockingStream.Blocked.WaitOne(1000).Should().BeTrue();
-                Assert.Throws<LiteException>(() => db.GetCollection<Person>().Insert(new Person())).Message.Should().Contain("timeout");
-                Assert.Throws<LiteException>(() => db.GetCollection<Person>().Insert(new Person())).Message.Should().Contain("timeout");
-            }
-            finally
-            {
-                blockingStream.ShouldUnblock.Set();
-                lockerThread?.Join();
             }
         }
     }

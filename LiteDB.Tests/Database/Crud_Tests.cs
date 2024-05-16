@@ -21,7 +21,7 @@ namespace LiteDB.Tests.Database
         [Fact]
         public void Insert_With_AutoId()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var users = db.GetCollection<User>("users");
 
@@ -56,7 +56,7 @@ namespace LiteDB.Tests.Database
         [Fact]
         public void Delete_Many()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var users = db.GetCollection<User>("users");
 

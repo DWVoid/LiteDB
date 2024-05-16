@@ -30,7 +30,7 @@ namespace LiteDB.Tests.Database
             p = p.And(x => x.Active);
             p = p.And(x => x.Age > 10);
 
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var col = db.GetCollection<User>("user");
 

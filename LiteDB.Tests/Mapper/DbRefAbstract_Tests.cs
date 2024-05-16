@@ -48,7 +48,7 @@ namespace LiteDB.Tests.Mapper
         [Fact]
         public void DbRef_List_Using_Abstract_Class()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var projectsCollection = db.GetCollection<ProjectList>("projects");
                 var itemsCollection = db.GetCollection<ItemBase>("items");
@@ -77,7 +77,7 @@ namespace LiteDB.Tests.Mapper
         [Fact]
         public void DbRef_Item_Using_Abstract_Class()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var projectsCollection = db.GetCollection<ProjectItem>("projects");
                 var itemsCollection = db.GetCollection<ItemBase>("items");

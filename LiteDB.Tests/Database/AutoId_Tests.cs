@@ -48,7 +48,7 @@ namespace LiteDB.Tests.Database
         {
             var mapper = new BsonMapper();
 
-            using (var db = new LiteDatabase(new MemoryStream(), mapper, new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:", mapper))
             {
                 var cs_int = db.GetCollection<EntityInt>("int");
                 var cs_long = db.GetCollection<EntityLong>("long");
@@ -188,7 +188,7 @@ namespace LiteDB.Tests.Database
         [Fact]
         public void AutoId_BsonDocument()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var col = db.GetCollection("Writers");
                 col.Insert(new BsonDocument { ["Name"] = "Mark Twain" });
@@ -210,7 +210,7 @@ namespace LiteDB.Tests.Database
         public void AutoId_No_Duplicate_After_Delete()
         {
             // using strong type
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var col = db.GetCollection<EntityInt>("col1");
 
@@ -238,7 +238,7 @@ namespace LiteDB.Tests.Database
             }
 
             // using bsondocument/engine
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var one = new BsonDocument { ["Name"] = "One" };
                 var two = new BsonDocument { ["Name"] = "Two" };
@@ -279,7 +279,7 @@ namespace LiteDB.Tests.Database
         [Fact]
         public void AutoId_property()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 // default auto id
                 var col1 = db.GetCollection("Col1");

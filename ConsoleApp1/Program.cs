@@ -4,14 +4,12 @@ using LiteDB.Engine;
 using System.Reflection.Emit;
 using System.Reflection.PortableExecutable;
 
-var password = "46jLz5QWd5fI3m4LiL2r";
 var path = $"C:\\LiteDB\\Examples\\CrashDB_{DateTime.Now.Ticks}.db";
 
 var settings = new EngineSettings
 {
     AutoRebuild = true,
     Filename = path,
-    Password = password
 };
 
 var data = Enumerable.Range(1, 10_000).Select(i => new BsonDocument

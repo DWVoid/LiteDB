@@ -33,7 +33,7 @@ namespace LiteDB.Benchmarks.Benchmarks.Insertion
 		{
 			_data = FileMetaGenerator<FileMetaBase>.GenerateList(DatasetSize); // executed once per each N value
 
-			_databaseInstanceInMemory = new LiteDatabase(new MemoryStream());
+			_databaseInstanceInMemory = new LiteDatabase(":memory:");
 			_fileMetaInMemoryCollection = _databaseInstanceInMemory.GetCollection<FileMetaBase>();
 		}
 

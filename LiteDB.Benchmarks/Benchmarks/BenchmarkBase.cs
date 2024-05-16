@@ -14,17 +14,7 @@ namespace LiteDB.Benchmarks.Benchmarks
             set => throw new System.NotImplementedException();
         }
 
-        [Params(ConnectionType.Direct)]
-        public ConnectionType ConnectionType;
-
-        [Params(null, "SecurePassword")]
-        public string Password;
-
-        public ConnectionString ConnectionString() => new ConnectionString(DatabasePath)
-        {
-            Connection = ConnectionType,
-            Password = Password
-        };
+        public ConnectionString ConnectionString() => new ConnectionString(DatabasePath);
 
         protected ILiteDatabase DatabaseInstance { get; set; }
     }

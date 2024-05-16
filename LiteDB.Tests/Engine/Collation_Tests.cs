@@ -18,7 +18,7 @@ namespace LiteDB.Tests.Engine
 
             var s = new EngineSettings
             {
-                DataStream = new MemoryStream()
+                Filename = ":memory:"
             };
 
             var names = new string[] { "Ze", "Ana", "Ána", "Ánã", "Ana Paula", "ana lucia" };
@@ -124,7 +124,7 @@ namespace LiteDB.Tests.Engine
         {
             var s = new EngineSettings
             {
-                DataStream = new MemoryStream(),
+                Filename = ":memory:",
                 Collation = new Collation("en-US/None")
             };
 

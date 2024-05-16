@@ -29,7 +29,7 @@ namespace LiteDB.Tests.Database
         [Fact]
         public void Index_Multikey_Using_Linq()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var col = db.GetCollection<User>();
 

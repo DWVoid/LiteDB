@@ -43,7 +43,7 @@
 //        public void DbRef_With_Interface()
 //        {
 
-//            using (var db = new LiteDatabase(new MemoryStream()))
+//            using (var db = new LiteDatabase(":memory:"))
 //            {
 //                var uc = db.GetCollection<IUserConfig>("userConfig");
 //                var ui = db.GetCollection<IUserInfo>("userInfo");

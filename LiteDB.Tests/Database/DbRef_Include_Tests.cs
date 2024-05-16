@@ -79,7 +79,7 @@ namespace LiteDB.Tests.Database
             mapper.Entity<Product>()
                 .DbRef(x => x.SupplierAddress, "addresses");
 
-            using (var db = new LiteDatabase(new MemoryStream(), mapper, new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:", mapper))
             {
                 var address = new Address { StreetName = "3600 S Las Vegas Blvd" };
                 var customer = new Customer { Name = "John Doe", MainAddress = address };

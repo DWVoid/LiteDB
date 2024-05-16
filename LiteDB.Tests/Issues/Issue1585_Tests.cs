@@ -25,7 +25,7 @@ namespace LiteDB.Tests.Issues
         [Fact]
         public void Dto_Read()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var id = Guid.NewGuid();
                 var col = db.GetCollection<PlayerDto>();
@@ -38,7 +38,7 @@ namespace LiteDB.Tests.Issues
         [Fact]
         public void Dto_Read1()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var id = Guid.NewGuid();
                 var col = db.GetCollection<PlayerDto>();
@@ -51,7 +51,7 @@ namespace LiteDB.Tests.Issues
         [Fact]
         public void Dto_Read2()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var id = Guid.NewGuid();
                 var col = db.GetCollection<PlayerDto>();
@@ -67,7 +67,7 @@ namespace LiteDB.Tests.Issues
         [Fact]
         public void Dto_Read3()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var id = Guid.NewGuid();
                 var col = db.GetCollection<PlayerDto>();
@@ -80,7 +80,7 @@ namespace LiteDB.Tests.Issues
         [Fact]
         public void Dto_Read4()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var id = Guid.NewGuid();
                 var col = db.GetCollection<PlayerDto>();
@@ -93,7 +93,7 @@ namespace LiteDB.Tests.Issues
         [Fact]
         public void Dto_Read5()
         {
-            using (var db = new LiteDatabase(new MemoryStream()))
+            using (var db = new LiteDatabase(":memory:"))
             {
                 var id = Guid.NewGuid();
                 var col = db.GetCollection<PlayerDto>();

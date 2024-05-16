@@ -78,7 +78,6 @@ namespace LiteDB.Tests.Issues
                 var connectionString = new ConnectionString
                 {
                     Filename = databasePath,
-                    Connection = ConnectionType.Direct
                 };
 
                 _liteDb = new LiteDatabase(connectionString);

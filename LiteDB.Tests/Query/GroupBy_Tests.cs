@@ -17,7 +17,7 @@ namespace LiteDB.Tests.QueryTest
         {
             local = DataGen.Person(1, 1000).ToArray();
 
-            db = new LiteDatabase(new MemoryStream());
+            db = new LiteDatabase(":memory:");
             collection = db.GetCollection<Person>();
 
             collection.Insert(local);
