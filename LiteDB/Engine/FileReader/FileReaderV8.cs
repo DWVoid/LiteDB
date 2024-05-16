@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using LiteDB.Storage;
 using static LiteDB.Constants;
 
 namespace LiteDB.Engine;
@@ -24,6 +25,7 @@ internal class FileReaderV8 : IFileReader
     private readonly Dictionary<string, uint> _collections = new Dictionary<string, uint>();
     private readonly Dictionary<string, List<IndexInfo>> _indexes = new Dictionary<string, List<IndexInfo>>();
     private readonly Dictionary<uint, List<uint>> _collectionsDataPages = new Dictionary<uint, List<uint>>();
+
     private readonly Dictionary<string, BsonValue> _pragmas = new Dictionary<string, BsonValue>
     {
         [Pragmas.USER_VERSION] = 0,
@@ -33,8 +35,8 @@ internal class FileReaderV8 : IFileReader
         [Pragmas.LIMIT_SIZE] = long.MaxValue,
     };
 
-    private Stream _dataStream;
-    private Stream _logStream;
+    private IRandomAccess _dataFile;
+    private IRandomAccess _logFile;
     private readonly IDictionary<uint, long> _logIndexMap = new Dictionary<uint, long>();
     private uint _maxPageID; // a file-length based max pageID to be tested
 
@@ -42,6 +44,8 @@ internal class FileReaderV8 : IFileReader
 
     private readonly EngineSettings _settings;
     private readonly IList<FileReaderError> _errors;
+    private IRandomAccessFactory _dataFactory;
+    private IRandomAccessFactory _logFactory;
 
     public FileReaderV8(EngineSettings settings, IList<FileReaderError> errors)
     {
@@ -56,19 +60,17 @@ internal class FileReaderV8 : IFileReader
     {
         try
         {
-            var dataFactory = _settings.CreateDataFactory();
-            var logFactory = _settings.CreateLogFactory();
+            _dataFactory = _settings.CreateDataFileFactory();
+            _logFactory = _settings.CreateLogFileFactory();
 
             // get maxPageID based on both file length
-            _maxPageID = (uint)((dataFactory.GetLength() + logFactory.GetLength()) / PAGE_SIZE);
+            _maxPageID = (uint)((_dataFactory.GetLength() + _logFactory.GetLength()) / PAGE_SIZE);
 
-            _dataStream = dataFactory.GetStream(true, false);
+            _dataFile = _dataFactory.Access;
 
-            _dataStream.Position = 0;
-
-            if (logFactory.Exists())
+            if (_logFactory.Exists)
             {
-                _logStream = logFactory.GetStream(false, true);
+                _logFile = _logFactory.Access;
 
                 this.LoadIndexMap();
             }
@@ -100,7 +102,8 @@ internal class FileReaderV8 : IFileReader
     /// <summary>
     /// Read all indexes from all collection pages (except _id index)
     /// </summary>
-    public IEnumerable<IndexInfo> GetIndexes(string collection) => _indexes.ContainsKey(collection) ? _indexes[collection] : new List<IndexInfo>();
+    public IEnumerable<IndexInfo> GetIndexes(string collection) =>
+        _indexes.ContainsKey(collection) ? _indexes[collection] : new List<IndexInfo>();
 
     /// <summary>
     /// Read all documents from current collection with NO index use - read direct from free lists
@@ -113,7 +116,7 @@ internal class FileReaderV8 : IFileReader
         var colID = _collections[collection];
 
         if (!_collectionsDataPages.ContainsKey(colID)) yield break;
-            
+
         var dataPages = _collectionsDataPages[colID];
         var uniqueIDs = new HashSet<BsonValue>();
 
@@ -153,7 +156,8 @@ internal class FileReaderV8 : IFileReader
                     if (position == 0) continue;
 
                     ENSURE(position > 0 && length > 0, $"Invalid footer ref position {position} with length {length}");
-                    ENSURE(position + length < PAGE_SIZE, $"Invalid footer ref position {position} with length {length}");
+                    ENSURE(position + length < PAGE_SIZE,
+                        $"Invalid footer ref position {position} with length {length}");
 
                     // get segment slice
                     var segment = buffer.Slice(position, length);
@@ -179,8 +183,10 @@ internal class FileReaderV8 : IFileReader
                             var nextBuffer = nextPage.Value.Buffer;
 
                             // make page validations
-                            ENSURE(nextPage.Value.PageType == PageType.Data, $"Invalid PageType (excepted Data, get {nextPage.Value.PageType})");
-                            ENSURE(nextPage.Value.ColID == colID, $"Invalid ColID in this page (expected {colID}, get {nextPage.Value.ColID})");
+                            ENSURE(nextPage.Value.PageType == PageType.Data,
+                                $"Invalid PageType (excepted Data, get {nextPage.Value.PageType})");
+                            ENSURE(nextPage.Value.ColID == colID,
+                                $"Invalid ColID in this page (expected {colID}, get {nextPage.Value.ColID})");
                             ENSURE(nextPage.Value.ItemsCount > 0, "Page with no items count");
 
                             // read slot address
@@ -192,7 +198,8 @@ internal class FileReaderV8 : IFileReader
                             length = nextBuffer.ReadUInt16(lengthAddr);
 
                             // empty slot
-                            ENSURE(length > 0, $"Last DataBlock request a next extend to {nextBlock}, but this block are empty footer");
+                            ENSURE(length > 0,
+                                $"Last DataBlock request a next extend to {nextBlock}, but this block are empty footer");
 
                             // get segment slice
                             segment = nextBuffer.Slice(position, length);
@@ -200,7 +207,8 @@ internal class FileReaderV8 : IFileReader
                             nextBlock = segment.ReadPageAddress(DataBlock.P_NEXT_BLOCK);
                             data = segment.Slice(DataBlock.P_BUFFER, segment.Count - DataBlock.P_BUFFER);
 
-                            ENSURE(extend == true, $"Next datablock always be an extend. Invalid data block {nextBlock}");
+                            ENSURE(extend == true,
+                                $"Next datablock always be an extend. Invalid data block {nextBlock}");
 
                             // write data on memorystream
 
@@ -215,7 +223,8 @@ internal class FileReaderV8 : IFileReader
                             var docResult = r.ReadDocument();
                             var id = docResult.Value["_id"];
 
-                            ENSURE(!(id == BsonValue.Null || id == BsonValue.MinValue || id == BsonValue.MaxValue), $"Invalid _id value: {id}");
+                            ENSURE(!(id == BsonValue.Null || id == BsonValue.MinValue || id == BsonValue.MaxValue),
+                                $"Invalid _id value: {id}");
                             ENSURE(uniqueIDs.Contains(id) == false, $"Duplicated _id value: {id}");
 
                             uniqueIDs.Add(id);
@@ -273,7 +282,9 @@ internal class FileReaderV8 : IFileReader
     private void LoadDataPages()
     {
         var header = this.ReadPage(0, out var pageInfo).GetValue();
-        var lastPageID = header.Buffer.ReadUInt32(HeaderPage.P_LAST_PAGE_ID); //TOFO: tentar não usar esse valor como referencia (varrer tudo)
+        var lastPageID =
+            header.Buffer.ReadUInt32(HeaderPage
+                .P_LAST_PAGE_ID); //TOFO: tentar não usar esse valor como referencia (varrer tudo)
 
         ENSURE(lastPageID <= _maxPageID, $"LastPageID {lastPageID} should be less or equals to maxPageID {_maxPageID}");
 
@@ -343,7 +354,7 @@ internal class FileReaderV8 : IFileReader
         }
 
         // for each collection loaded by datapages, check if exists in _collections
-        foreach(var collection in _collectionsDataPages)
+        foreach (var collection in _collectionsDataPages)
         {
             if (!_collections.ContainsValue(collection.Key))
             {
@@ -394,8 +405,10 @@ internal class FileReaderV8 : IFileReader
 
                     position += 15; // head 5 bytes, tail 5 bytes, reserved 1 byte, freeIndexPageList 4 bytes
 
-                    ENSURE(!string.IsNullOrEmpty(name), $"Index name can't be empty (collection {collection.Key} - index: {i})");
-                    ENSURE(!string.IsNullOrEmpty(expr), $"Index expression can't be empty (collection {collection.Key} - index: {i})");
+                    ENSURE(!string.IsNullOrEmpty(name),
+                        $"Index name can't be empty (collection {collection.Key} - index: {i})");
+                    ENSURE(!string.IsNullOrEmpty(expr),
+                        $"Index expression can't be empty (collection {collection.Key} - index: {i})");
 
                     var indexInfo = new IndexInfo
                     {
@@ -452,15 +465,15 @@ internal class FileReaderV8 : IFileReader
         var currentPosition = 0L;
         var pageInfo = new PageInfo { Origin = FileOrigin.Log };
 
-        _logStream.Position = 0;
+        var lPosition = 0L;
+        var lLength = _logFile.Length;
 
-        while (_logStream.Position < _logStream.Length)
+        while (lPosition < lLength)
         {
             try
             {
-                _logStream.Position = pageInfo.Position = currentPosition;
-
-                var read = _logStream.Read(buffer.Array, buffer.Offset, PAGE_SIZE);
+                lPosition = pageInfo.Position = currentPosition;
+                var read = _logFile.Read(buffer.Array.AsSpan().Slice(buffer.Offset, PAGE_SIZE), lPosition);
 
                 if (buffer.IsBlank())
                 {
@@ -477,7 +490,8 @@ internal class FileReaderV8 : IFileReader
                 pageInfo.PageID = pageID;
                 pageInfo.ColID = buffer.ReadUInt32(BasePage.P_COL_ID);
 
-                ENSURE(read == PAGE_SIZE, $"Page position {_logStream} read only than {read} bytes (instead {PAGE_SIZE})");
+                ENSURE(read == PAGE_SIZE,
+                    $"Page position {lPosition} read only than {read} bytes (instead {PAGE_SIZE})");
 
                 var position = new PagePosition(pageID, currentPosition);
 
@@ -531,28 +545,28 @@ internal class FileReaderV8 : IFileReader
             ENSURE(pageID <= _maxPageID, $"PageID: {pageID} should be less then or equals to maxPageID: {_maxPageID}");
 
             var pageBuffer = new PageBuffer(new byte[PAGE_SIZE], 0, PAGE_SIZE);
-            Stream stream;
-            int read;
+            IRandomAccess access;
 
             // get data from log file or original file
             if (_logIndexMap.TryGetValue(pageID, out pageInfo.Position))
             {
                 pageInfo.Origin = FileOrigin.Log;
-                stream = _logStream;
+                access = _logFile;
             }
             else
             {
                 pageInfo.Origin = FileOrigin.Data;
                 pageInfo.Position = BasePage.GetPagePosition(pageID);
-
-                stream = _dataStream;
+                access = _dataFile;
             }
 
-            stream.Position = pageInfo.Position;
+            var read = access.Read(
+                pageBuffer.Array.AsSpan().Slice(pageBuffer.Offset, pageBuffer.Count),
+                pageInfo.Position
+            );
 
-            read = stream.Read(pageBuffer.Array, pageBuffer.Offset, pageBuffer.Count);
-
-            ENSURE(read == PAGE_SIZE, $"Page position {stream.Position} read only than {read} bytes (instead {PAGE_SIZE})");
+            ENSURE(read == PAGE_SIZE,
+                $"Page position {pageInfo.Position} read only than {read} bytes (instead {PAGE_SIZE})");
 
             var page = new BasePage(pageBuffer);
 
@@ -602,8 +616,8 @@ internal class FileReaderV8 : IFileReader
     {
         if (!_disposed)
         {
-            _dataStream?.Dispose();
-            _logStream?.Dispose();
+            _dataFactory.Close();
+            _logFactory.Close();
             _disposed = true;
         }
     }

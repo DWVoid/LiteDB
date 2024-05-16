@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using LiteDB.Storage;
 using static LiteDB.Constants;
 
 namespace LiteDB.Engine
@@ -16,16 +17,16 @@ namespace LiteDB.Engine
     /// </summary>
     internal class SortDisk : IDisposable
     {
-        private readonly IStreamFactory _factory;
-        private readonly StreamPool _pool;
+        private readonly IRandomAccessFactory _factory;
         private readonly ConcurrentBag<long> _freePositions = new ConcurrentBag<long>();
         private long _lastContainerPosition = 0;
         private readonly int _containerSize;
         private readonly EnginePragmas _pragmas;
+        private object _wLock = new();
 
         public int ContainerSize => _containerSize;
 
-        public SortDisk(IStreamFactory factory, int containerSize, EnginePragmas pragmas)
+        public SortDisk(IRandomAccessFactory factory, int containerSize, EnginePragmas pragmas)
         {
             ENSURE(containerSize % PAGE_SIZE == 0, "size must be PAGE_SIZE multiple");
 
@@ -34,24 +35,21 @@ namespace LiteDB.Engine
             _pragmas = pragmas;
 
             _lastContainerPosition = -containerSize;
-
-            _pool = new StreamPool(_factory, false);
         }
 
         /// <summary>
         /// Get a new reader stream from pool. Must return after use
         /// </summary>
-        public Stream GetReader()
+        public IRandomAccess GetReader()
         {
-            return _pool.Rent();
+            return _factory.Access;
         }
 
         /// <summary>
         /// Return used open reader stream to be reused in next sort
         /// </summary>
-        public void Return(Stream stream)
+        public void Return(IRandomAccess stream)
         {
-            _pool.Return(stream);
         }
 
         /// <summary>
@@ -83,23 +81,24 @@ namespace LiteDB.Engine
         /// </summary>
         public void Write(long position, BufferSlice buffer)
         {
-            var writer = _pool.Writer;
+            var access = _factory.Access;
 
             // there is only a single writer instance, must be lock to ensure only 1 single thread are writing
-            lock(writer)
+            lock(_wLock)
             {
+                // TODO: simplify
                 for (var i = 0; i < _containerSize / PAGE_SIZE; ++i)
                 {
-                    writer.Position = position + i * PAGE_SIZE;
-                    writer.Write(buffer.Array, buffer.Offset + i * PAGE_SIZE, PAGE_SIZE);
+                    access.Write(
+                        buffer.Array.AsSpan().Slice(buffer.Offset + i * PAGE_SIZE, PAGE_SIZE),
+                        position + i * PAGE_SIZE
+                    );
                 }
             }
         }
 
         public void Dispose()
         {
-            _pool.Dispose();
-
             _factory.Delete();
         }
     }

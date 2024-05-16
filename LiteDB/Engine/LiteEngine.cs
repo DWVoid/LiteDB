@@ -143,7 +143,7 @@ namespace LiteDB.Engine
                 }
 
                 // initialize sort temp disk
-                _sortDisk = new SortDisk(_settings.CreateTempFactory(), CONTAINER_SORT_SIZE, _header.Pragmas);
+                _sortDisk = new SortDisk(_settings.CreateTempFileFactory(), CONTAINER_SORT_SIZE, _header.Pragmas);
 
                 // initialize transaction monitor as last service
                 _monitor = new TransactionMonitor(_header, _locker, _disk, _walIndex);

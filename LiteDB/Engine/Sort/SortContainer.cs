@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using LiteDB.Storage;
 using static LiteDB.Constants;
 
 namespace LiteDB.Engine
@@ -54,18 +55,20 @@ namespace LiteDB.Engine
 
         public void Insert(IEnumerable<KeyValuePair<BsonValue, PageAddress>> items, int order, BufferSlice buffer)
         {
-            var query = order == Query.Ascending ?
-                items.OrderBy(x => x.Key, _collation) : items.OrderByDescending(x => x.Key, _collation);
+            var query = order == Query.Ascending
+                ? items.OrderBy(x => x.Key, _collation)
+                : items.OrderByDescending(x => x.Key, _collation);
 
             var offset = 0;
 
-            foreach(var item in query)
+            foreach (var item in query)
             {
                 buffer.WriteIndexKey(item.Key, offset);
 
                 var keyLength = IndexNode.GetKeyLength(item.Key, false);
 
-                if (keyLength > MAX_INDEX_KEY_LENGTH) throw LiteException.InvalidIndexKey($"Sort key must be less than {MAX_INDEX_KEY_LENGTH} bytes.");
+                if (keyLength > MAX_INDEX_KEY_LENGTH)
+                    throw LiteException.InvalidIndexKey($"Sort key must be less than {MAX_INDEX_KEY_LENGTH} bytes.");
 
                 offset += keyLength;
 
@@ -82,11 +85,11 @@ namespace LiteDB.Engine
         /// <summary>
         /// Initialize reader based on Stream (if data was persisted in disk) or Buffer (if all data fit in only 1 container)
         /// </summary>
-        public void InitializeReader(Stream stream, BufferSlice buffer, bool utcDate)
+        public void InitializeReader(IRandomAccess stream, BufferSlice buffer, bool utcDate)
         {
             if (stream != null)
             {
-                _reader = new BufferReader(this.GetSourceFromStream(stream), utcDate);
+                _reader = new BufferReader(this.GetSourceFromAccess(stream), utcDate);
             }
             else
             {
@@ -117,19 +120,15 @@ namespace LiteDB.Engine
         /// <summary>
         /// Get 8k buffer slices inside file container
         /// </summary>
-        private IEnumerable<BufferSlice> GetSourceFromStream(Stream stream)
+        private IEnumerable<BufferSlice> GetSourceFromAccess(IRandomAccess stream)
         {
             var bytes = BufferPool.Rent(PAGE_SIZE);
             var buffer = new BufferSlice(bytes, 0, PAGE_SIZE);
 
             while (_readPosition < _size)
             {
-                stream.Position = this.Position + _readPosition;
-
-                stream.Read(bytes, 0, PAGE_SIZE);
-
+                stream.Read(bytes.AsSpan(), this.Position + _readPosition);
                 _readPosition += PAGE_SIZE;
-
                 yield return buffer;
             }
 

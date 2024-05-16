@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using LiteDB.Storage;
 using static LiteDB.Constants;
 
 namespace LiteDB.Engine
@@ -28,7 +29,7 @@ namespace LiteDB.Engine
         private readonly int _order;
         private readonly EnginePragmas _pragmas;
         private readonly BufferSlice _buffer;
-        private readonly Lazy<Stream> _reader;
+        private readonly Lazy<IRandomAccess> _reader;
 
         /// <summary>
         /// Get how many documents was inserted by Insert method
@@ -47,7 +48,7 @@ namespace LiteDB.Engine
             _pragmas = pragmas;
             _containerSize = disk.ContainerSize;
 
-            _reader = new Lazy<Stream>(() => _disk.GetReader());
+            _reader = new Lazy<IRandomAccess>(() => _disk.GetReader());
 
             var bytes = BufferPool.Rent(disk.ContainerSize);
 
